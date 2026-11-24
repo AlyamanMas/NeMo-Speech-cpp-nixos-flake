@@ -269,6 +269,46 @@ The runtime image entry point is `nemo-speech`; models remain outside the
 image. HTTP, gRPC, Flashlight, normalization, NMT, and TTS language frontends
 are controlled by Docker build arguments documented in the Dockerfile.
 
+## Nix
+
+The flake builds the CLI, SDK, and HTTP server with one backend per package.
+It fetches the pinned llama.cpp and cpp-httplib sources itself, so no
+submodule checkout is needed:
+
+```bash
+nix run .#cpu -- --version    # CPU (x86-64-v3 on x86_64), runs the unit tests
+nix build .#cuda              # NVIDIA CUDA, patched ggml
+nix build .#vulkan            # Vulkan, stock ggml
+nix build .#metal             # Apple Silicon; also the default on aarch64-darwin
+nix build .#cuda-jetson-orin  # aarch64-linux: Jetson Orin, JetPack 6 (CUDA 12.6)
+nix build .#cuda-jetson-thor  # aarch64-linux: Jetson Thor, JetPack 7 (CUDA 13.0)
+```
+
+`nix/package.nix` exposes the components and backends as override arguments,
+and `overlays.default` adds it to nixpkgs as `nemo-speech`. CUDA builds target
+the GPU architectures in the nixpkgs `cudaCapabilities` config; set it to your
+GPUs to cut build time:
+
+```nix
+pkgs = import nixpkgs {
+  system = "x86_64-linux";
+  overlays = [ nemo-speech.overlays.default ];
+  config = { allowUnfree = true; cudaCapabilities = [ "8.9" ]; };
+};
+pkgs.nemo-speech.override { cudaSupport = true; enableS2s = true; }
+```
+
+On NixOS, CUDA and Vulkan binaries find the GPU driver through
+`/run/opengl-driver`, which `hardware.graphics.enable` (plus the NVIDIA driver
+for CUDA) provides. On other distributions, run them through
+[nixGL](https://github.com/nix-community/nixGL).
+
+`nix develop` (or `.#cuda`, `.#vulkan`) enters a shell with the matching
+toolchain for the regular CMake workflow above. When moving the `llama.cpp` or
+`third_party/cpp-httplib` submodule, update its input URL in `flake.nix` and
+run `nix flake lock`; `scripts/check_nix_submodule_pins.sh` (also a pre-commit
+hook) catches a mismatch.
+
 ## Build outputs
 
 Selected artifacts are written under the configured build directory's `bin/`:

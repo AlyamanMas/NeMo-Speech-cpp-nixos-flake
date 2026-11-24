@@ -13,6 +13,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: nix-submodule-pins
+        name: flake.nix pins match submodule commits
+        entry: scripts/check_nix_submodule_pins.sh
+        language: system
+        pass_filenames: false
+        always_run: true
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
